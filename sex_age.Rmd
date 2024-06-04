@@ -1,0 +1,103 @@
+---
+title: "sex_age"
+author: "时光般颠沛流离"
+date: "2024-06-01"
+output: html_document
+---
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(Cairo)
+library(extrafont)
+
+# 导入并注册Arial字体
+font_import(paths = "C:/Windows/Fonts", pattern = "arial", prompt = FALSE)
+loadfonts(device = "win")  # Windows用户
+
+```
+
+```{r}
+# 定义新的年龄分组和标签
+age_breaks <- c(-Inf, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, Inf)
+age_labels <- c("≤ 20", "21-25", "26-30", "31-35", "36-40", "41-45", "46-50", "51-55", "56-60", "61-65", "66-70", "71-75", "76-80", "≥ 81")
+
+# 将年龄分段并创建新的列
+# 假设数据中有列名为Age和Sex的数据框为original_data
+original_data <- sex_age %>%
+  na.omit() %>%
+  mutate(Age_Group = cut(Age, breaks = age_breaks, labels = age_labels, right = FALSE))
+
+# 按性别和年龄段汇总数据，计算人口数和百分比
+summary_data <- original_data %>%
+  count(Sex, Age_Group) %>%
+  complete(Sex, Age_Group, fill = list(n = 0)) %>%
+  group_by(Sex) %>%
+  mutate(total_population = sum(n),
+         Percentage = ifelse(total_population == 0, 0, (n / total_population) * 100))
+
+# 将中文标签替换为英文标签
+summary_data$Sex[summary_data$Sex == "男"] <- "Male"
+summary_data$Sex[summary_data$Sex == "女"] <- "Female"
+
+# 将 Sex 为 Male 的 Percentage 变成负数
+summary_data$Percentage[summary_data$Sex == "Male"] <- -summary_data$Percentage[summary_data$Sex == "Male"]
+
+# 输出整理后的数据
+print(summary_data)
+
+# 先调整Sex列的顺序，将Male放在前面
+summary_data$Sex <- factor(summary_data$Sex, levels = c("Male", "Female"))
+
+```
+
+```{r}
+# 创建金字塔图并调整分面展示
+gg <- ggplot(summary_data, aes(x = Age_Group, y = Percentage, fill = Sex)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = sprintf("%.1f%%", abs(Percentage))), position = position_stack(vjust = 0.5), size = 3.5, color = "black") +  # 添加数据标签
+  scale_fill_manual(values = c("skyblue", "pink")) +
+  labs(x = "Age Groups", y = "Proportion(%)") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 10, family = "Arial"),
+    axis.text.x = element_text(family = "Arial"),  # 设置横坐标字体
+    axis.text.y = element_text(family = "Arial"),  # 设置纵坐标字体
+    legend.position = "none",  # 不显示图例
+    axis.title.y = element_blank(),  # 将左边纵轴的标签隐藏
+    strip.text = element_text(size = 10, family = "Arial"),
+    plot.title = element_text(size = 16, family = "Arial"), # 调整分面标题的大小
+    text = element_text(family = "Arial")  # 设置字体
+  ) +
+  coord_flip() +
+  facet_wrap(~ Sex, scales = "free", ncol = 2) +  # 设置列数为2，以并排显示男性和女性的图形
+  scale_y_continuous(labels = function(x) abs(x)) +  # 对y轴标签应用绝对值以显示正数
+  # 添加矩形框
+  geom_rect(
+    aes(xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf),
+    color = "gray80", fill = NA, alpha = 0.5,
+    inherit.aes = FALSE
+  )
+
+# 添加额外的主题和标签
+gg <- gg +
+  labs(
+    x = NULL,
+    y = "Proportion(%)",
+    fill = NULL,  # 去除图例标题
+    title = NULL  # 去除图表标题
+  ) +
+  theme(
+    axis.title.x = element_text(size = 14, family = "Arial"),  # 调整 x 轴标题大小
+    axis.title.y = element_text(size = 14, family = "Arial"),  # 调整 y 轴标题大小
+    strip.text = element_text(size = 14, family = "Arial")  # 调整分面标题的大小
+  )
+
+# 显示图形
+print(gg)
+
+# 保存为PDF文件
+ggsave("all.pdf", plot = gg, device = cairo_pdf, width = 9, height =6)
+
+```
+
